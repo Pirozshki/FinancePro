@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Soft Slate Theme */
+  --neu-bg: #e0e5ec;
+  --neu-light: #ffffff;
+  --neu-shadow: #a3b1c6;
+  --accent: #6366f1;
+}
+
+.dark {
+  --neu-bg: #1a1d23;
+  --neu-light: #242932;
+  --neu-shadow: #111317;
+}
+
+/* Ensure transition is smooth across the whole app */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+body {
+  background-color: var(--neu-bg);
+  color: #4a5568;
+  font-family: 'Inter', sans-serif;
+  transition: background-color 0.4s ease;
+}
+
+.dark body {
+  color: #e2e8f0;
+}
+
+@layer components {
+  .neu-flat {
+    background: var(--neu-bg);
+    box-shadow: 12px 12px 24px var(--neu-shadow), 
+               -12px -12px 24px var(--neu-light);
+    border-radius: 30px;
+  }
+
+  .neu-inset {
+    background: var(--neu-bg);
+    box-shadow: inset 8px 8px 16px var(--neu-shadow), 
+                inset -8px -8px 16px var(--neu-light);
+    border-radius: 16px;
+  }
+
+  .neu-button {
+    background: var(--neu-bg);
+    box-shadow: 6px 6px 12px var(--neu-shadow), 
+               -6px -6px 12px var(--neu-light);
+    @apply transition-all duration-200 active:scale-95 hover:text-indigo-500;
+  }
+
+  /* Custom Cubs Theme for March */
+.cubs-theme {
+  --accent: #0E3386; /* Cubs Blue */
+  --highlight: #CC3433; /* Cubs Red */
+}
+
+.cubs-theme .text-indigo-500, 
+.cubs-theme .text-indigo-600 {
+  color: var(--accent) !important;
+}
+
+.cubs-theme .bg-indigo-500 {
+  background-color: var(--accent) !important;
+}
+
+.cubs-theme .neu-button {
+  border-bottom: 3px solid var(--highlight);
+}
+
+.cubs-theme h1 {
+  text-shadow: 2px 2px 0px rgba(204, 52, 51, 0.2);
+}
+
+/* Add a subtle grass-green gradient to the background for Spring Training vibes */
+.cubs-theme body {
+  background: radial-gradient(circle at top right, #e0e5ec, #d4dbdf);
+}
+}
