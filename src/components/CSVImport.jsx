@@ -42,17 +42,23 @@ const parseChaseCSV = (text) => {
   // Strip UTF-8 BOM that Chase CSVs often include, plus normalize line endings
   const lines = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim().split('\n').filter(l => l.trim());
 
-  // Find the header row — check for Chase-specific column names
+  // Find the header row — supports both credit card ('Transaction Date') and
+  // checking account ('Details, Posting Date') Chase CSV formats
   const headerIdx = lines.findIndex(l => {
     const normalized = l.replace(/"/g, '').trim();
-    return normalized.startsWith('Transaction Date') || normalized.startsWith('Date,');
+    return normalized.startsWith('Transaction Date') ||
+           normalized.startsWith('Date,') ||
+           normalized.startsWith('Details,');
   });
   if (headerIdx === -1) return null;
 
   const headers = parseCSVLine(lines[headerIdx]).map(h => h.replace(/"/g, ''));
   const col = (name) => headers.findIndex(h => h === name);
 
-  const dateIdx = col('Transaction Date') !== -1 ? col('Transaction Date') : col('Date');
+  // Credit card exports use 'Transaction Date'; checking exports use 'Posting Date'
+  const dateIdx = col('Transaction Date') !== -1 ? col('Transaction Date') :
+                  col('Posting Date') !== -1    ? col('Posting Date') :
+                                                  col('Date');
   const descIdx = col('Description');
   const amtIdx = col('Amount');
   const catIdx = col('Category');
