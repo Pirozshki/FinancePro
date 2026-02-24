@@ -4,6 +4,8 @@ import Dashboard from './components/Dashboard';
 import TransactionForm from './components/TransactionForm';
 import SummaryTable from './components/SummaryTable';
 import LimitManager from './components/LimitManager';
+import PlaidLink from './components/PlaidLink';
+import CSVImport from './components/CSVImport';
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -12,6 +14,7 @@ const App = () => {
   const [isDark, setIsDark] = useState(false);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   // Initial Fetch & Real-time Subscription
   useEffect(() => {
@@ -24,7 +27,7 @@ const App = () => {
           .maybeSingle();
 
         if (error) throw error;
-        
+
         if (cloudData) {
           setData(cloudData.content);
         } else {
@@ -46,12 +49,12 @@ const App = () => {
 
     // Listen for cloud updates from other devices
     const channel = supabase.channel('realtime-budget')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'budget_data' }, 
-      (payload) => {
-        if (payload.new && payload.new.content) {
-          setData(payload.new.content);
-        }
-      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'budget_data' },
+        (payload) => {
+          if (payload.new && payload.new.content) {
+            setData(payload.new.content);
+          }
+        })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -64,10 +67,10 @@ const App = () => {
         const { error } = await supabase
           .from('budget_data')
           .upsert(
-            { id: 1, content: data }, 
-            { onConflict: 'id' } 
+            { id: 1, content: data },
+            { onConflict: 'id' }
           );
-          
+
         if (error) console.error("Save Error (400 check):", error.message);
       }, 1000);
       return () => clearTimeout(timer);
@@ -107,6 +110,24 @@ const App = () => {
     setData(prev => ({ ...prev, monthlyData: updated }));
   };
 
+  // Groups CSV-imported transactions by month and inserts them into the right ledger
+  const addBulkTransactions = (transactions) => {
+    setData(prev => {
+      const updated = { ...prev.monthlyData };
+      transactions.forEach((t, i) => {
+        const date = new Date(t.date + 'T00:00:00');
+        const monthName = months[date.getMonth()];
+        const monthEntry = updated[monthName] || { expenses: [], limits: {} };
+        monthEntry.expenses = [
+          { id: Date.now() + i, description: t.description, amount: t.amount, category: t.category, date: t.date },
+          ...monthEntry.expenses,
+        ];
+        updated[monthName] = monthEntry;
+      });
+      return { ...prev, monthlyData: updated };
+    });
+  };
+
   const updateLimit = (category, amount) => {
     const updated = { ...data.monthlyData };
     const monthTarget = updated[currentMonth] || { expenses: [], limits: {} };
@@ -134,29 +155,46 @@ const App = () => {
               ))}
             </div>
           </div>
-          <div className="neu-button p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest opacity-60">
-            {isDark ? '🌙 Dark Mode' : '☀️ Light Mode'}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCSVImport(true)}
+              className="neu-button px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-400 active:scale-95 transition-all"
+            >
+              📥 Import CSV
+            </button>
+            <div className="neu-button p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest opacity-60">
+              {isDark ? '🌙 Dark Mode' : '☀️ Light Mode'}
+            </div>
           </div>
         </header>
+
+        {showCSVImport && (
+          <CSVImport
+            categories={data.categories}
+            onImport={(txns) => { addBulkTransactions(txns); }}
+            onClose={() => setShowCSVImport(false)}
+          />
+        )}
 
         <Dashboard income={data.income} expenses={activeMonthData.expenses} limits={activeMonthData.limits} monthName={currentMonth} />
 
         <div className="flex flex-col lg:flex-row gap-10 items-start">
           <div className="w-full lg:w-1/3 space-y-10">
             <div className="neu-flat p-8 space-y-6">
-               <h3 className="text-[10px] font-bold opacity-40 uppercase tracking-widest text-indigo-500">Global Income</h3>
-               <div className="neu-inset p-4 flex items-center justify-between">
-                 <span className="text-xs font-bold opacity-60">Annual Base</span>
-                 <input 
-                   type="number" 
-                   className="bg-transparent text-right focus:outline-none font-bold text-green-500 w-24"
-                   value={data.income}
-                   onChange={(e) => setData(prev => ({...prev, income: Number(e.target.value)}))}
-                 />
-               </div>
+              <h3 className="text-[10px] font-bold opacity-40 uppercase tracking-widest text-indigo-500">Global Income</h3>
+              <div className="neu-inset p-4 flex items-center justify-between">
+                <span className="text-xs font-bold opacity-60">Annual Base</span>
+                <input
+                  type="number"
+                  className="bg-transparent text-right focus:outline-none font-bold text-green-500 w-24"
+                  value={data.income}
+                  onChange={(e) => setData(prev => ({ ...prev, income: Number(e.target.value) }))}
+                />
+              </div>
             </div>
             <TransactionForm categories={data.categories} onAdd={addTransaction} />
             <LimitManager categories={data.categories} limits={activeMonthData.limits} onUpdateLimit={updateLimit} />
+            <PlaidLink />
           </div>
           <div className="w-full lg:w-2/3">
             <SummaryTable expenses={activeMonthData.expenses} categoryLimits={activeMonthData.limits} />
