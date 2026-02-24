@@ -109,6 +109,14 @@ const App = () => {
     setData(prev => ({ ...prev, monthlyData: updated }));
   };
 
+  const deleteTransaction = (id) => {
+    const updated = { ...data.monthlyData };
+    const monthTarget = updated[currentMonth] || { expenses: [], limits: {} };
+    monthTarget.expenses = monthTarget.expenses.filter(e => e.id !== id);
+    updated[currentMonth] = monthTarget;
+    setData(prev => ({ ...prev, monthlyData: updated }));
+  };
+
   // Groups CSV-imported transactions by month and inserts them into the right ledger
   const addBulkTransactions = (transactions) => {
     setData(prev => {
@@ -195,7 +203,7 @@ const App = () => {
             <LimitManager categories={data.categories} limits={activeMonthData.limits} onUpdateLimit={updateLimit} />
           </div>
           <div className="w-full lg:w-2/3">
-            <SummaryTable expenses={activeMonthData.expenses} categoryLimits={activeMonthData.limits} />
+            <SummaryTable expenses={activeMonthData.expenses} categoryLimits={activeMonthData.limits} onDelete={deleteTransaction} />
           </div>
         </div>
       </div>

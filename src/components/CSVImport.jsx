@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 
-// Maps Chase's built-in categories to FinancePro categories
+// Maps Chase credit card categories to FinancePro categories
 const CHASE_CATEGORY_MAP = {
   'Food & Drink': '🍔 Dining Out',
   'Groceries': '🛒 Groceries',
@@ -13,6 +13,29 @@ const CHASE_CATEGORY_MAP = {
   'Entertainment': '🎢 Kids/Family',
   'Health & Wellness': '🛒 Groceries',
   'Fees & Adjustments': '⚡ Utilities',
+};
+
+// Keyword matching for checking account exports (which have no Category column)
+const DESCRIPTION_KEYWORD_MAP = [
+  { keywords: ['FRYS', 'KROGER', 'JEWEL', 'TRADER JOE', 'ALDI', 'PETES FRESH', 'WHOLE FOODS', 'MARIANO', 'INSTACART', 'DOLLAR TREE', 'SCHNUCKS'], category: '🛒 Groceries' },
+  { keywords: ['STARBUCKS', 'COFFEE', 'PANERA', 'PORTILLO', 'JERSEY MIKE', 'NANCYS PIZZA', 'NANCYS PIZZERIA', 'GRAZIANO', 'TST*', 'HOOLIGANS', 'MAROUF', 'HARAZ', 'PEIXOTO', 'GOST', 'BILLY GOAT', 'CIELO CONCESSIONS', 'RESTAURANT', 'PIZZERIA', 'TAVERN'], category: '🍔 Dining Out' },
+  { keywords: ['SHELL', 'CHEVRON', 'CIRCLE K', 'CASEY', 'GAS N WASH', 'SCHOOLHOUSE GAS'], category: '🚗 Transport' },
+  { keywords: ['COMCAST', 'XFINITY', 'NICOR GAS', 'COMED', 'VERIZON', 'PLANET FITNESS', 'AT&T'], category: '⚡ Utilities' },
+  { keywords: ['WEALTHFRONT', 'QAPITAL', 'FID BKG', 'ILD529', 'FIDELITY'], category: '💰 Savings' },
+  { keywords: ['SLOAN PARK', 'CHICAGO CUBS', 'CIELO', '2SLOAN', 'LEVY@ SLOAN'], category: '⚾ Cubs Trip' },
+  { keywords: ['GYMNASTICS', 'HOBBYLOBBY', 'TIKTOK SHOP', 'BARNES & NOBLE', 'TJMAXX', 'TARGET'], category: '🎢 Kids/Family' },
+  { keywords: ['NSM ', 'MR.COOPER', 'MORTGAGE', 'BRGHTWHL'], category: '🏠 Rent/Mortgage' },
+  { keywords: ['LOWE\'S', 'LOWES', 'HOME DEPOT'], category: '🏠 Rent/Mortgage' },
+];
+
+// Fallback: match category from description keywords (for checking account CSVs)
+const matchByDescription = (description) => {
+  if (!description) return null;
+  const upper = description.toUpperCase();
+  for (const { keywords, category } of DESCRIPTION_KEYWORD_MAP) {
+    if (keywords.some(k => upper.includes(k.toUpperCase()))) return category;
+  }
+  return null;
 };
 
 // Parses a single CSV line, respecting quoted fields
@@ -78,14 +101,16 @@ const parseChaseCSV = (text) => {
     if (['Payment', 'Return', 'Credit'].includes(type)) continue;
 
     const chaseCategory = catIdx >= 0 ? cols[catIdx]?.replace(/"/g, '').trim() : '';
+    const description = cols[descIdx]?.replace(/"/g, '').trim();
+    const suggestedCategory = CHASE_CATEGORY_MAP[chaseCategory] || matchByDescription(description) || null;
 
     transactions.push({
       date: toISODate(cols[dateIdx]),
-      description: cols[descIdx]?.replace(/"/g, '').trim(),
+      description,
       amount: Math.abs(amount),
       chaseCategory,
-      suggestedCategory: CHASE_CATEGORY_MAP[chaseCategory] || null,
-      category: CHASE_CATEGORY_MAP[chaseCategory] || null, // will be set in component
+      suggestedCategory,
+      category: suggestedCategory, // will be set in component
     });
   }
 
