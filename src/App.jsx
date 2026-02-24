@@ -4,7 +4,6 @@ import Dashboard from './components/Dashboard';
 import TransactionForm from './components/TransactionForm';
 import SummaryTable from './components/SummaryTable';
 import LimitManager from './components/LimitManager';
-import PlaidLink from './components/PlaidLink';
 import CSVImport from './components/CSVImport';
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -194,7 +193,6 @@ const App = () => {
             </div>
             <TransactionForm categories={data.categories} onAdd={addTransaction} />
             <LimitManager categories={data.categories} limits={activeMonthData.limits} onUpdateLimit={updateLimit} />
-            <PlaidLink />
           </div>
           <div className="w-full lg:w-2/3">
             <SummaryTable expenses={activeMonthData.expenses} categoryLimits={activeMonthData.limits} />
