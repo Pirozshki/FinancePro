@@ -62,11 +62,8 @@ const toISODate = (dateStr) => {
 };
 
 const parseChaseCSV = (text) => {
-  // Strip UTF-8 BOM that Chase CSVs often include, plus normalize line endings
   const lines = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim().split('\n').filter(l => l.trim());
 
-  // Find the header row — supports both credit card ('Transaction Date') and
-  // checking account ('Details, Posting Date') Chase CSV formats
   const headerIdx = lines.findIndex(l => {
     const normalized = l.replace(/"/g, '').trim();
     return normalized.startsWith('Transaction Date') ||
@@ -78,13 +75,12 @@ const parseChaseCSV = (text) => {
   const headers = parseCSVLine(lines[headerIdx]).map(h => h.replace(/"/g, ''));
   const col = (name) => headers.findIndex(h => h === name);
 
-  // Credit card exports use 'Transaction Date'; checking exports use 'Posting Date'
   const dateIdx = col('Transaction Date') !== -1 ? col('Transaction Date') :
                   col('Posting Date') !== -1    ? col('Posting Date') :
                                                   col('Date');
   const descIdx = col('Description');
-  const amtIdx = col('Amount');
-  const catIdx = col('Category');
+  const amtIdx  = col('Amount');
+  const catIdx  = col('Category');
   const typeIdx = col('Type');
 
   if (dateIdx === -1 || descIdx === -1 || amtIdx === -1) return null;
@@ -96,13 +92,13 @@ const parseChaseCSV = (text) => {
     const amount = parseFloat(cols[amtIdx]);
     const type = typeIdx >= 0 ? cols[typeIdx]?.replace(/"/g, '').trim() : '';
 
-    // Chase exports debits as negative numbers — skip credits, returns, payments
     if (isNaN(amount) || amount >= 0) continue;
     if (['Payment', 'Return', 'Credit'].includes(type)) continue;
 
-    const chaseCategory = catIdx >= 0 ? cols[catIdx]?.replace(/"/g, '').trim() : '';
-    const description = cols[descIdx]?.replace(/"/g, '').trim();
-    const suggestedCategory = CHASE_CATEGORY_MAP[chaseCategory] || matchByDescription(description) || null;
+    const chaseCategory  = catIdx >= 0 ? cols[catIdx]?.replace(/"/g, '').trim() : '';
+    const description    = cols[descIdx]?.replace(/"/g, '').trim();
+    const suggestedCategory =
+      CHASE_CATEGORY_MAP[chaseCategory] || matchByDescription(description) || null;
 
     transactions.push({
       date: toISODate(cols[dateIdx]),
@@ -110,7 +106,6 @@ const parseChaseCSV = (text) => {
       amount: Math.abs(amount),
       chaseCategory,
       suggestedCategory,
-      category: suggestedCategory, // will be set in component
     });
   }
 
@@ -141,10 +136,12 @@ const CSVImport = ({ categories, onImport, onClose }) => {
         return;
       }
 
-      // Assign a default category for any transaction that didn't auto-match
+      // When no category matched, leave category empty so the user is prompted
       const withCategories = parsed.map(t => ({
         ...t,
-        category: t.suggestedCategory || categories[0],
+        category: t.suggestedCategory || '',
+        isAutoMatched: !!t.suggestedCategory,
+        needsReview: !t.suggestedCategory,
       }));
 
       setTransactions(withCategories);
@@ -154,13 +151,22 @@ const CSVImport = ({ categories, onImport, onClose }) => {
   };
 
   const updateCategory = (index, category) => {
-    setTransactions(prev => prev.map((t, i) => i === index ? { ...t, category } : t));
+    setTransactions(prev => prev.map((t, i) =>
+      i === index ? { ...t, category, needsReview: false } : t
+    ));
   };
 
   const handleImport = () => {
-    onImport(transactions);
+    // Assign first category as absolute last-resort fallback for any still-uncategorized rows
+    const toImport = transactions.map(t => ({
+      ...t,
+      category: t.category || categories[0],
+    }));
+    onImport(toImport);
     setStep('done');
   };
+
+  const needsReviewCount = transactions.filter(t => !t.category).length;
 
   const formatDate = (dateStr) =>
     new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -178,7 +184,7 @@ const CSVImport = ({ categories, onImport, onClose }) => {
             <p className="text-[10px] opacity-40 uppercase tracking-widest mt-1">
               {step === 'upload' && 'Upload your Chase transaction export'}
               {step === 'review' && `${transactions.length} expenses found — review categories before importing`}
-              {step === 'done' && `${transactions.length} transactions imported across your monthly ledgers`}
+              {step === 'done'   && `${transactions.length} transactions imported across your monthly ledgers`}
             </p>
           </div>
           <button
@@ -221,6 +227,16 @@ const CSVImport = ({ categories, onImport, onClose }) => {
         {/* ── REVIEW STEP ── */}
         {step === 'review' && (
           <>
+            {/* Warning banner if any transactions need category review */}
+            {needsReviewCount > 0 && (
+              <div className="neu-inset px-4 py-3 flex items-center gap-2">
+                <span className="text-amber-500">⚠️</span>
+                <p className="text-[10px] font-bold text-amber-500">
+                  {needsReviewCount} transaction{needsReviewCount !== 1 ? 's' : ''} couldn't be auto-categorized — select a category before importing.
+                </p>
+              </div>
+            )}
+
             <div className="overflow-y-auto flex-1">
               <table className="w-full text-left border-separate border-spacing-y-2">
                 <thead>
@@ -233,7 +249,7 @@ const CSVImport = ({ categories, onImport, onClose }) => {
                 </thead>
                 <tbody>
                   {transactions.map((t, i) => (
-                    <tr key={i}>
+                    <tr key={i} className={t.needsReview ? 'opacity-100' : ''}>
                       <td className="px-3 py-2 text-[10px] font-bold opacity-40 whitespace-nowrap">
                         {formatDate(t.date)}
                       </td>
@@ -247,10 +263,21 @@ const CSVImport = ({ categories, onImport, onClose }) => {
                         <select
                           value={t.category}
                           onChange={e => updateCategory(i, e.target.value)}
-                          className={`neu-inset px-2 py-1.5 bg-transparent focus:outline-none text-[10px] font-bold appearance-none cursor-pointer w-full ${t.suggestedCategory ? 'text-indigo-500' : 'text-gray-400'
-                            }`}
+                          className={`neu-inset px-2 py-1.5 bg-transparent focus:outline-none text-[10px] font-bold appearance-none cursor-pointer w-full ${
+                            !t.category
+                              ? 'text-amber-500 border border-amber-500/30 rounded'
+                              : t.isAutoMatched
+                              ? 'text-indigo-500'
+                              : 'text-gray-400'
+                          }`}
                         >
-                          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                          {/* Placeholder for unmatched transactions */}
+                          {!t.category && (
+                            <option value="" disabled>— Select category —</option>
+                          )}
+                          {categories.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
                         </select>
                       </td>
                     </tr>
@@ -260,7 +287,7 @@ const CSVImport = ({ categories, onImport, onClose }) => {
             </div>
 
             <p className="text-[9px] opacity-40 italic">
-              Categories in indigo were auto-matched from Chase. Adjust any that look off before importing.
+              Categories in indigo were auto-matched. <span className="text-amber-500">Amber</span> rows need a category selected. Adjust anything that looks off before importing.
             </p>
 
             <button
